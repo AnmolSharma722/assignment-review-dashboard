@@ -1,139 +1,129 @@
-# Assignment & Review Dashboard
+# Assignment & Review Dashboard — Round 2
 
-A responsive dashboard for a student-assignment system with two roles: **Student** and **Admin (Professor)**.
-Built with **React 19 + TypeScript + Tailwind CSS v4** (Vite). There is no backend: data lives in `localStorage`
-behind a small mock-API layer, so it survives a page refresh.
+Student, group and assignment management for two roles — **Student** and **Professor** — with login/register,
+a simulated JWT session, course-based dashboards, group submissions and live submission tracking.
+
+Built with **React 19 + TypeScript + Tailwind CSS v4** (Vite, React Router, Vitest). There is no backend: a
+mock API over `localStorage` stores the data, so it survives a refresh.
 
 - **Live demo:** _add your Vercel/Netlify link here_
 - **Demo video:** _add your Loom / Drive link here_
+- The app lives in [`/frontend`](./frontend).
+
+## Demo logins
+
+Password for every demo account: **`Demo@1234`** (the login page also has one-click fill buttons).
+
+| Role | Name | Email | Good for |
+|---|---|---|---|
+| Professor | Prof. Rahul Verma | rahul.verma@university.edu | Web Development: group assignment tracking |
+| Professor | Prof. Meera Iyer | meera.iyer@university.edu | Data Structures, Algorithms |
+| Student | Kabir Singh | kabir.singh@student.edu | **Leader** of Byte Club: acknowledge the group assignment |
+| Student | Isha Nair | isha.nair@student.edu | **Member** of Byte Club: sees "Acknowledged by Kabir Singh…" but cannot submit |
+| Student | Rohan Gupta | rohan.gupta@student.edu | **No group** in Web Development: sees the "not part of any group" message |
+| Student | Aarav Mehta | aarav.mehta@student.edu | Leader of Team Pixel (already acknowledged) |
+
+You can also register a new Student or Professor. A new professor can create courses; a new student can enrol in them.
+"Reset demo data" on the login page restores the seed data.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Login](docs/screenshots/01-login.jpg) **Login** with demo accounts | ![Register](docs/screenshots/02-register.jpg) **Register** with role choice |
+| ![Professor dashboard](docs/screenshots/03-professor-dashboard.jpg) **Professor** course cards | ![Tracking](docs/screenshots/04-professor-course-tracking.jpg) **Tracking**: progress, drill-down, ungrouped students |
+| ![Student dashboard](docs/screenshots/05-student-dashboard.jpg) **Student** course cards | ![Group leader](docs/screenshots/06-student-group-leader.jpg) **Group leader** view |
+| ![Confirm](docs/screenshots/07-group-confirmation-dialog.jpg) **Confirmation** before a group submission | ![No group](docs/screenshots/08-student-no-group.jpg) **No group** message and button |
+| ![Create or join](docs/screenshots/09-create-or-join-group.jpg) **Create or join** a group | ![Mobile](docs/screenshots/10-mobile-student-course.jpg) **Mobile** layout |
+| ![Dark mode](docs/screenshots/11-dark-professor-course.jpg) **Dark mode** | |
 
 ## Features
 
-**Login & roles**
-- Mock login / role switcher with seeded users: 2 professors and 5 students (no real auth).
-- Every user sees only their own data. Students see only assignments assigned to them; admins see only the assignments they created.
+**Auth & session**
+- Login and register with inline validation and clear messages (email format, password rules, matching passwords, role required).
+- Register as Student or Professor; each role lands on its own dashboard.
+- Simulated JWT: `header.payload.signature` stored in `localStorage`, verified on load, expires after 8 hours, cleared on logout.
+- Protected routes: signed-out visitors go to login; a student cannot open `/professor/...` and vice versa.
+
+**Professor**
+- Dashboard of course cards, each opening that course's assignments page.
+- Create, edit, delete assignments: title, description, deadline (**date and time**), OneDrive link, submission type (Individual / Group).
+- Tracking per assignment: "x of N students (or groups) submitted", progress bar, and a drill-down of who has and has not submitted.
+- Group assignments are tracked per group, with a warning listing students who are in no group.
+- Search, status filters and sorting.
 
 **Student**
-- Assignment list with title, description, due date, status, professor and Drive link.
-- Two-step submission: **"Yes, I have submitted"** → **"Final confirmation"** dialog → status becomes **Submitted**.
-- Overall progress indicator ("3 of 6 submitted" + progress bar).
+- Dashboard of enrolled courses with progress; course page lists every assignment with deadline, OneDrive link, type and status.
+- Individual: **"Yes, I have submitted"** → confirm → timestamp stored.
+- Group: only the **leader** can acknowledge; afterwards every member sees **"Acknowledged by [Leader] on [date and time]"**.
+- No group: "You are not part of any group. Create or join one to submit this assignment." with a button.
+- Groups: create one (you become leader) or join one; members and leader are shown.
 
-**Admin**
-- Create, edit and delete assignments (with a Drive link), assign to **all** students or **selected** students.
-- Per assignment: every assigned student's status (Submitted / Not submitted, with date) and a class-completion progress bar.
-- Summary tiles: number of assignments, average completion, past-due & incomplete.
+**Polish**
+- Progress bars, status badges with icons, overdue highlighting, toasts, hover/focus states, transitions, loading skeletons/spinners, empty and error states.
+- Fully responsive, dark mode, keyboard accessible, `prefers-reduced-motion` respected.
 
-**General**
-- Fully responsive (mobile → desktop), dark mode, search, status/due filters, sorting, overdue highlighting.
-- Loading, empty, "no results" and error states (including recovery from corrupted saved data).
-- Accessibility: semantic landmarks, skip link, labelled form controls with inline errors, `aria-live` announcements, focus-trapped dialogs, keyboard operable, status never conveyed by colour alone, `prefers-reduced-motion` respected.
-- Small animations (entrance, progress bar, dialog pop-in).
-- Tests: 35 unit + integration tests (Vitest + Testing Library).
+## Design choices
 
-## Demo accounts
+- **Rules live in the data layer, not just the UI.** `lib/rules.ts` holds pure functions (`acknowledgeAssignment`, `createGroup`, …) that return `{ ok: true, db } | { ok: false, error }`. The "only the leader can acknowledge" rule is enforced there, so the UI can't bypass it, and it is unit-tested without rendering anything.
+- **Status is derived, never stored.** Whether something is submitted comes from acknowledgement records, so the student view, the group view and the professor's counts can't disagree.
+- **Acknowledgements belong to a subject** (`student` or `group`), so group submissions need no special casing in the tracking code.
+- **Course-based model.** Courses own assignments; students enrol themselves and professors create courses, so a newly registered user has a working app without any seeding.
+- **One group per course; submission type is locked once anyone has acknowledged,** so existing submissions are never invalidated by an edit.
+- **Mock API behind one module** (`lib/storage.ts`) with simulated latency, so it can be swapped for real HTTP calls later.
+- **Accessibility first:** labelled forms, focus-trapped dialogs, `aria-live` toasts, status never shown by colour alone.
 
-| Role | Name |
-| --- | --- |
-| Admin | Prof. Meera Iyer, Prof. Rahul Verma |
-| Student | Aarav Mehta, Diya Sharma, Kabir Singh, Isha Nair, Rohan Gupta |
+### Known limitations
+- The JWT and password hash are **simulated** for the front-end exercise and give no real security. A real app would issue the token server-side.
+- Data is per-browser (`localStorage`); there is no sync between devices.
 
-Seed due dates are generated relative to "today", so there is always a mix of overdue, due-soon and upcoming work.
-Use **Reset demo data** on the login screen to restore the original data.
+## Component structure
+
+```
+App ── ThemeProvider ─ ToastProvider ─ DataProvider ─ AuthProvider ─ Routes
+        │
+        ├─ /login, /register            (PublicOnly)   → features/auth
+        ├─ /professor                   (RequireAuth: professor)
+        │    ├─ ProfessorDashboard      → CourseCard, CourseFormModal
+        │    └─ courses/:courseId → ProfessorCoursePage
+        │          ├─ FilterBar, StatTile
+        │          └─ ProfessorAssignmentCard → ProgressBar, TrackingList, AssignmentForm
+        └─ /student                     (RequireAuth: student)
+             ├─ StudentDashboard        → CourseCard, EnrollDialog
+             └─ courses/:courseId → StudentCoursePage
+                   ├─ GroupPanel → GroupDialog (create / join)
+                   └─ StudentAssignmentCard → StatusBadge, ConfirmDialog
+```
+
+```
+frontend/src
+├─ components/   ui/ (Button, Modal, ProgressBar, …) · layout/ · assignments/ · courses/ · routing/ (guards)
+├─ context/      AuthContext (token + session) · DataContext (db + actions) · ThemeContext · ToastContext
+├─ features/     auth/ · professor/ · student/ · common/
+├─ lib/          rules.ts (business rules) · domain.ts (derived data) · token.ts · storage.ts · validation.ts · dates.ts
+├─ data/         seed.ts
+└─ test/         integration tests (auth, student, professor)
+```
 
 ## Setup
 
-Requires **Node.js 20+**.
-
 ```bash
+cd frontend
 npm install
-npm run dev          # http://localhost:5173
+npm run dev        # http://localhost:5173
+npm test           # 96 tests (unit + integration)
+npm run build      # type-check + production build into dist/
 ```
 
-| Script | What it does |
-| --- | --- |
-| `npm run dev` | Start the dev server |
-| `npm run build` | Type-check, then build to `dist/` |
-| `npm run preview` | Serve the production build locally |
-| `npm run typecheck` | TypeScript only |
-| `npm test` | Run all tests once (`npm run test:watch` to watch) |
+## Deploy (Vercel or Netlify)
 
-## Deploy
+The app uses client-side routing, so every path must fall back to `index.html`. Config is included
+(`vercel.json`, `netlify.toml`, `public/_redirects`).
 
-**Vercel:** push to GitHub → *Add New → Project* → import the repo. Framework preset **Vite**, build command `npm run build`, output directory `dist`. Deploy.
+- **Vercel:** Import the GitHub repo → set **Root Directory** to `frontend` → framework *Vite* → Deploy.
+- **Netlify:** New site from Git → set **Base directory** to `frontend` (build `npm run build`, publish `dist`) → Deploy.
 
-**Netlify:** *Add new site → Import from Git*. Build command `npm run build`, publish directory `dist`.
+## Git history
 
-The app is a single page with no client-side router, so no rewrite rules are needed.
-
-## Folder structure
-
-```
-src/
-├── main.tsx                  # entry point
-├── App.tsx                   # providers + <Shell/> (loading → error → login → role dashboard)
-├── index.css                 # Tailwind import, dark-mode variant, animations, focus ring
-├── types.ts                  # User, Assignment, Submission, Database, ...
-├── constants.ts              # filter / sort option lists
-├── data/
-│   └── seed.ts               # demo users, assignments, submissions (dates relative to today)
-├── lib/                      # framework-free logic (easy to unit test)
-│   ├── domain.ts             # visibility rules, status, progress, search/filter/sort
-│   ├── dates.ts              # local-time due-date helpers and labels
-│   ├── validation.ts         # assignment form validation
-│   ├── storage.ts            # mock API over localStorage (+ session)
-│   ├── ids.ts, cn.ts
-├── context/
-│   ├── DataContext.tsx       # loads/saves the database, exposes mutations
-│   ├── AuthContext.tsx       # mock login/logout, current user
-│   └── ThemeContext.tsx      # light/dark
-├── hooks/
-│   ├── useNow.ts             # ticking "now" so overdue labels stay correct
-│   └── useNotice.ts          # transient toast message
-├── components/
-│   ├── ui/                   # generic primitives: Button, Modal, ConfirmDialog, ProgressBar,
-│   │                         #   StatusBadge, EmptyState, ErrorState, Spinner, Notice, Field
-│   ├── layout/               # AppLayout, AppHeader, ThemeToggle, Avatar
-│   └── assignments/          # shared by both roles: FilterBar, DueDate, DriveLink
-├── features/
-│   ├── auth/LoginPage.tsx
-│   ├── student/              # StudentDashboard, AssignmentCard
-│   └── admin/                # AdminDashboard, AdminAssignmentCard, AssignmentForm, StudentStatusList
-└── test/                     # test setup + integration tests (lib/*.test.ts sit next to their code)
-```
-
-## Component architecture
-
-```
-<ThemeProvider>
-  <DataProvider>            ← database state + mutations, persisted to localStorage
-    <AuthProvider>          ← who is logged in
-      <Shell>
-        loading  → <Spinner/>
-        error    → <ErrorState/> (Try again / Reset demo data)
-        no user  → <LoginPage/>
-        admin    → <AppLayout><AdminDashboard/></AppLayout>
-        student  → <AppLayout><StudentDashboard/></AppLayout>
-```
-
-- **Student:** `StudentDashboard` (progress card, `FilterBar`, list, `ConfirmDialog`) → `AssignmentCard`.
-- **Admin:** `AdminDashboard` (summary tiles, `FilterBar`, list, form `Modal`, delete `ConfirmDialog`) → `AdminAssignmentCard` → `StudentStatusList`; the form is `AssignmentForm`.
-- **Data flow:** one-way. Dashboards read `db` from `useReadyData()`, derive what they need with pure functions from `lib/domain.ts`, and call context actions (`submitAssignment`, `createAssignment`, ...) to change it. A single `useEffect` in `DataProvider` writes every change to `localStorage`.
-
-## Key design decisions
-
-1. **Statuses are derived, not stored.** The only stored fact is a `Submission` record (assignment + student + timestamp). *Submitted / Pending / Overdue* is computed from that and the due date, so it can never go stale, and "overdue" updates itself as time passes (`useNow`).
-2. **Normalised data model.** `users`, `assignments`, `submissions` are separate arrays; assignments store `assignedTo: 'all' | string[]`. Class completion and per-student status come from joining them, and deleting an assignment also removes its submissions.
-3. **Mock API boundary.** Components never touch `localStorage`; only `lib/storage.ts` does. `loadDatabase()` is async with a small artificial delay so real loading/error states exist, and replacing it with `fetch` calls is a one-file change.
-4. **Authorization lives in the data layer.** The UI only shows permitted actions, but `updateAssignment` / `deleteAssignment` / `submitAssignment` re-check ownership and audience themselves.
-5. **Pure logic separated from UI.** Everything in `lib/` has no React in it and is unit-tested directly; integration tests then exercise whole user flows.
-6. **Context API, no state library.** The state is one small document and a handful of actions; Context + hooks is sufficient and keeps the dependency list short.
-7. **Dates are calendar days in local time** (`YYYY-MM-DD`), avoiding the UTC off-by-one bug. An assignment is overdue from the day *after* its due date.
-8. **Accessible by construction.** A single `Modal` primitive handles focus trapping/restoration, Escape, scroll lock and labelling, and is reused for every dialog. Forms validate on submit, then live, and move focus to the first invalid field.
-9. **Tailwind v4 with class-based dark mode** (`dark` class on `<html>`, set before first paint to avoid a flash).
-10. **Cross-tab sync** via the `storage` event, so a student's submission shows up in a professor's open tab.
-
-## Assumptions & limitations
-
-- Drive links in the seed data are placeholders. The app records the student's *confirmation* of submission; it does not verify the upload.
-- "Mock login" has no passwords by design; it is not a security boundary.
-- Data is per-browser (localStorage). Removing students from an assignment keeps their old submission records, so re-adding them restores their status.
+Round 1 history is preserved; Round 2 starts at "restructure into /frontend" and is split into small commits
+(domain model → auth → login/register → professor flow → student flow → tests → docs).
