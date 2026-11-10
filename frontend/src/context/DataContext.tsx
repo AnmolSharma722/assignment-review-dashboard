@@ -4,11 +4,11 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
-import { createId } from '../lib/ids';
-import { isAssignedTo } from '../lib/domain';
+import * as rules from '../lib/rules';
 import {
   STORAGE_KEYS,
   loadDatabase,
@@ -16,9 +16,22 @@ import {
   resetDatabase,
   saveDatabase,
 } from '../lib/storage';
-import type { Assignment, AssignmentInput, Database } from '../types';
+import type {
+  Acknowledgement,
+  Assignment,
+  AssignmentInput,
+  Course,
+  CourseInput,
+  Database,
+  Group,
+  RegisterInput,
+  User,
+} from '../types';
 
 type Status = 'loading' | 'ready' | 'error';
+
+/** What an action returns to the UI: success (plus any created record) or an error message. */
+export type Outcome<T extends object = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 interface DataContextValue {
   status: Status;
@@ -30,10 +43,20 @@ interface DataContextValue {
   db: Database | null;
   reload: () => void;
   resetDemoData: () => void;
-  createAssignment: (input: AssignmentInput, adminId: string) => Assignment;
-  updateAssignment: (id: string, input: AssignmentInput, adminId: string) => void;
-  deleteAssignment: (id: string, adminId: string) => void;
-  submitAssignment: (assignmentId: string, studentId: string) => void;
+
+  registerUser: (input: RegisterInput) => Outcome<{ user: User }>;
+  createCourse: (professorId: string, input: CourseInput) => Outcome<{ course: Course }>;
+  enrollStudent: (courseId: string, studentId: string) => Outcome;
+  createAssignment: (
+    professorId: string,
+    courseId: string,
+    input: AssignmentInput,
+  ) => Outcome<{ assignment: Assignment }>;
+  updateAssignment: (professorId: string, assignmentId: string, input: AssignmentInput) => Outcome;
+  deleteAssignment: (professorId: string, assignmentId: string) => Outcome;
+  createGroup: (studentId: string, courseId: string, name: string) => Outcome<{ group: Group }>;
+  joinGroup: (studentId: string, groupId: string) => Outcome<{ group: Group }>;
+  acknowledge: (actorId: string, assignmentId: string) => Outcome<{ acknowledgement: Acknowledgement }>;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -46,17 +69,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [persistError, setPersistError] = useState<string | null>(null);
   const [db, setDb] = useState<Database | null>(null);
 
+  // The ref always holds the latest database, so an action can run its rule against
+  // current data and report success/failure synchronously (setState can't do that).
+  const dbRef = useRef<Database | null>(null);
+  const commit = useCallback((next: Database) => {
+    dbRef.current = next;
+    setDb(next);
+  }, []);
+
   const load = useCallback(async () => {
     setStatus('loading');
     setError(null);
     try {
-      setDb(await loadDatabase());
+      commit(await loadDatabase());
       setStatus('ready');
     } catch (e) {
       setError(messageOf(e));
       setStatus('error');
     }
-  }, []);
+  }, [commit]);
 
   useEffect(() => {
     void load();
@@ -78,94 +109,38 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const onStorage = (event: StorageEvent) => {
       if (event.key !== STORAGE_KEYS.db || event.newValue === null) return;
       try {
-        setDb(parseDatabase(event.newValue));
+        commit(parseDatabase(event.newValue));
       } catch {
         /* ignore a malformed write from another tab */
       }
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, []);
-
-  const update = useCallback((fn: (current: Database) => Database) => {
-    setDb((current) => (current ? fn(current) : current));
-  }, []);
+  }, [commit]);
 
   const resetDemoData = useCallback(() => {
     try {
-      setDb(resetDatabase());
+      commit(resetDatabase());
       setError(null);
       setStatus('ready');
     } catch (e) {
       setError(messageOf(e));
       setStatus('error');
     }
-  }, []);
+  }, [commit]);
 
-  // ---- mutations -------------------------------------------------------------------------
-  // Each one re-checks permissions (an admin can only touch their own assignments,
-  // a student can only submit what was assigned to them). The UI never offers the
-  // other actions, but the data layer is the real gatekeeper.
-
-  const createAssignment = useCallback(
-    (input: AssignmentInput, adminId: string): Assignment => {
-      const assignment: Assignment = {
-        ...input,
-        id: createId('asg'),
-        createdBy: adminId,
-        createdAt: new Date().toISOString(),
-      };
-      update((d) => ({ ...d, assignments: [...d.assignments, assignment] }));
-      return assignment;
+  /** Runs a pure rule against the current database and commits the result. */
+  const run = useCallback(
+    <T extends object>(rule: (current: Database) => rules.Result<T>): Outcome<T> => {
+      const current = dbRef.current;
+      if (!current) return { ok: false, error: 'The data is still loading. Please try again.' };
+      const result = rule(current);
+      if (!result.ok) return result;
+      const { db: next, ...rest } = result;
+      commit(next);
+      return rest as Outcome<T>; // `rest` still carries `ok: true` plus any created record
     },
-    [update],
-  );
-
-  const updateAssignment = useCallback(
-    (id: string, input: AssignmentInput, adminId: string) => {
-      update((d) => ({
-        ...d,
-        assignments: d.assignments.map((a) =>
-          a.id === id && a.createdBy === adminId ? { ...a, ...input } : a,
-        ),
-      }));
-    },
-    [update],
-  );
-
-  const deleteAssignment = useCallback(
-    (id: string, adminId: string) => {
-      update((d) => {
-        const target = d.assignments.find((a) => a.id === id);
-        if (!target || target.createdBy !== adminId) return d;
-        return {
-          ...d,
-          assignments: d.assignments.filter((a) => a.id !== id),
-          submissions: d.submissions.filter((s) => s.assignmentId !== id),
-        };
-      });
-    },
-    [update],
-  );
-
-  const submitAssignment = useCallback(
-    (assignmentId: string, studentId: string) => {
-      update((d) => {
-        const assignment = d.assignments.find((a) => a.id === assignmentId);
-        const alreadySubmitted = d.submissions.some(
-          (s) => s.assignmentId === assignmentId && s.studentId === studentId,
-        );
-        if (!assignment || !isAssignedTo(assignment, studentId) || alreadySubmitted) return d;
-        return {
-          ...d,
-          submissions: [
-            ...d.submissions,
-            { assignmentId, studentId, submittedAt: new Date().toISOString() },
-          ],
-        };
-      });
-    },
-    [update],
+    [commit],
   );
 
   const value = useMemo<DataContextValue>(
@@ -176,23 +151,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
       db,
       reload: () => void load(),
       resetDemoData,
-      createAssignment,
-      updateAssignment,
-      deleteAssignment,
-      submitAssignment,
+      registerUser: (input) => run((d) => rules.registerUser(d, input)),
+      createCourse: (professorId, input) => run((d) => rules.createCourse(d, professorId, input)),
+      enrollStudent: (courseId, studentId) => run((d) => rules.enrollStudent(d, courseId, studentId)),
+      createAssignment: (professorId, courseId, input) =>
+        run((d) => rules.createAssignment(d, professorId, courseId, input)),
+      updateAssignment: (professorId, assignmentId, input) =>
+        run((d) => rules.updateAssignment(d, professorId, assignmentId, input)),
+      deleteAssignment: (professorId, assignmentId) =>
+        run((d) => rules.deleteAssignment(d, professorId, assignmentId)),
+      createGroup: (studentId, courseId, name) => run((d) => rules.createGroup(d, studentId, courseId, name)),
+      joinGroup: (studentId, groupId) => run((d) => rules.joinGroup(d, studentId, groupId)),
+      acknowledge: (actorId, assignmentId) => run((d) => rules.acknowledgeAssignment(d, actorId, assignmentId)),
     }),
-    [
-      status,
-      error,
-      persistError,
-      db,
-      load,
-      resetDemoData,
-      createAssignment,
-      updateAssignment,
-      deleteAssignment,
-      submitAssignment,
-    ],
+    [status, error, persistError, db, load, resetDemoData, run],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
