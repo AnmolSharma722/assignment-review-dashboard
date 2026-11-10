@@ -1,8 +1,8 @@
 import { CircleCheck, Clock, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { cn } from '../../lib/cn';
-import type { StudentStatus } from '../../types';
+import type { SubmissionStatus } from '../../types';
 
-const config: Record<StudentStatus, { label: string; Icon: LucideIcon; classes: string }> = {
+const config: Record<SubmissionStatus, { label: string; Icon: LucideIcon; classes: string }> = {
   submitted: {
     label: 'Submitted',
     Icon: CircleCheck,
@@ -24,7 +24,7 @@ const config: Record<StudentStatus, { label: string; Icon: LucideIcon; classes: 
 };
 
 interface StatusBadgeProps {
-  status: StudentStatus;
+  status: SubmissionStatus;
   /** Override the default wording (the admin view says "Not submitted"). */
   label?: string;
 }

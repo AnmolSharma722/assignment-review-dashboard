@@ -30,6 +30,11 @@ const sizes: Record<Size, string> = {
   md: 'px-4 py-2 text-sm',
 };
 
+/** Class string for anything that should look like a button (e.g. a router <Link>). */
+export function buttonClass(variant: Variant = 'secondary', size: Size = 'md', className?: string): string {
+  return cn(base, variants[variant], sizes[size], className);
+}
+
 export function Button({
   variant = 'secondary',
   size = 'md',
@@ -45,7 +50,7 @@ export function Button({
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={cn(base, variants[variant], sizes[size], className)}
+      className={buttonClass(variant, size, className)}
       {...rest}
     >
       {loading && <Spinner size="sm" decorative />}
