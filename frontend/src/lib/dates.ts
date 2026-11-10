@@ -1,61 +1,63 @@
 /**
- * Date helpers. Due dates are stored as plain `YYYY-MM-DD` strings (a calendar
- * day, not an instant) and always interpreted in the viewer's local time zone.
- * That avoids the classic "due date shifts by a day" UTC bug.
+ * Date helpers. Deadlines are stored as full ISO instants and displayed in the
+ * viewer's local time zone. The `<input type="datetime-local">` control works
+ * with local `YYYY-MM-DDTHH:mm` strings, so there are two converters for that.
  */
 
-const MS_PER_DAY = 86_400_000;
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
 const pad = (n: number) => String(n).padStart(2, '0');
 
-export function toISODate(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+/** ISO instant -> local `YYYY-MM-DDTHH:mm` (the value of a datetime-local input). */
+export function toLocalInputValue(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function parseISODate(iso: string): Date {
-  const [year, month, day] = iso.split('-').map(Number);
-  return new Date(year, month - 1, day);
+/** Local `YYYY-MM-DDTHH:mm` -> ISO instant. (No offset means "local time" per the spec.) */
+export function fromLocalInputValue(local: string): string {
+  return new Date(local).toISOString();
 }
 
-export function addDays(date: Date, days: number): Date {
-  const copy = new Date(date);
-  copy.setDate(copy.getDate() + days);
-  return copy;
+export function isValidLocalDateTime(local: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local)) return false;
+  const d = new Date(local);
+  return !Number.isNaN(d.getTime()) && toLocalInputValue(d.toISOString()) === local;
 }
 
-/** Whole calendar days from today until `iso` (negative when in the past). */
-export function daysUntil(iso: string, now: Date = new Date()): number {
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  // Math.round absorbs the 23h / 25h days around daylight-saving changes.
-  return Math.round((parseISODate(iso).getTime() - today.getTime()) / MS_PER_DAY);
+export function isPastDeadline(iso: string, now: Date = new Date()): boolean {
+  return new Date(iso).getTime() < now.getTime();
 }
 
-/** An assignment is overdue from the day *after* its due date. */
-export function isPastDue(iso: string, now: Date = new Date()): boolean {
-  return daysUntil(iso, now) < 0;
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
 }
 
 export function formatDate(iso: string): string {
-  return parseISODate(iso).toLocaleDateString('en-GB', {
+  return new Date(iso).toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
   });
 }
 
-export function formatTimestamp(timestamp: string): string {
-  return new Date(timestamp).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
+const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
 
-/** Human friendly relative label: "Due today", "Due in 3 days", "2 days overdue". */
-export function dueLabel(iso: string, now: Date = new Date()): string {
-  const days = daysUntil(iso, now);
-  if (days === 0) return 'Due today';
-  if (days === 1) return 'Due tomorrow';
-  if (days > 1) return `Due in ${days} days`;
-  if (days === -1) return '1 day overdue';
-  return `${Math.abs(days)} days overdue`;
+/** "Due in 3 days", "Due in 5 hours", "12 minutes overdue", ... */
+export function deadlineLabel(iso: string, now: Date = new Date()): string {
+  const diff = new Date(iso).getTime() - now.getTime();
+  const abs = Math.abs(diff);
+  let amount: string;
+  if (abs < HOUR) amount = plural(Math.max(1, Math.floor(abs / MINUTE)), 'minute');
+  else if (abs < DAY) amount = plural(Math.floor(abs / HOUR), 'hour');
+  else amount = plural(Math.floor(abs / DAY), 'day');
+  return diff >= 0 ? `Due in ${amount}` : `${amount} overdue`;
 }

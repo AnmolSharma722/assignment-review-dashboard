@@ -1,4 +1,4 @@
-import type { AdminFilter, SortKey, StudentFilter } from './types';
+import type { ProfessorFilter, SortKey, StudentFilter } from './types';
 
 interface Option<T extends string> {
   value: T;
@@ -6,8 +6,8 @@ interface Option<T extends string> {
 }
 
 export const SORT_OPTIONS: Option<SortKey>[] = [
-  { value: 'due-asc', label: 'Due date (soonest)' },
-  { value: 'due-desc', label: 'Due date (latest)' },
+  { value: 'deadline-asc', label: 'Deadline (soonest)' },
+  { value: 'deadline-desc', label: 'Deadline (latest)' },
   { value: 'title', label: 'Title (A–Z)' },
 ];
 
@@ -18,9 +18,9 @@ export const STUDENT_FILTERS: Option<StudentFilter>[] = [
   { value: 'overdue', label: 'Overdue' },
 ];
 
-export const ADMIN_FILTERS: Option<AdminFilter>[] = [
+export const PROFESSOR_FILTERS: Option<ProfessorFilter>[] = [
   { value: 'all', label: 'All' },
   { value: 'upcoming', label: 'Upcoming' },
-  { value: 'past-due', label: 'Past due' },
+  { value: 'past-deadline', label: 'Past deadline' },
   { value: 'complete', label: 'Fully submitted' },
 ];

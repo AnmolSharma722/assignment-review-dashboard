@@ -2,20 +2,24 @@
  * Mock "API" layer over localStorage.
  *
  * The rest of the app only talks to these functions, so swapping in a real
- * backend later means re-implementing this one file. `loadDatabase` is async
- * (with a small artificial latency) so the UI has real loading and error
- * states to handle, just like it would with a network call.
+ * backend later means re-implementing this one file. Loading is async (with a
+ * small artificial latency) so the UI has real loading and error states to
+ * handle, just like it would with a network call.
  */
 import { createSeedData } from '../data/seed';
 import type { Database } from '../types';
 
 export const STORAGE_KEYS = {
-  db: 'ard:db:v1',
-  session: 'ard:session:v1',
+  db: 'ard2:db',
+  token: 'ard2:token',
   theme: 'ard:theme:v1',
 } as const;
 
-const LATENCY_MS = import.meta.env.MODE === 'test' ? 0 : 450;
+const IS_TEST = import.meta.env.MODE === 'test';
+
+/** Simulated network latency. Zero under test so suites stay fast. */
+export const delay = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, IS_TEST ? 0 : ms));
 
 export class StorageError extends Error {
   constructor(message: string) {
@@ -23,8 +27,6 @@ export class StorageError extends Error {
     this.name = 'StorageError';
   }
 }
-
-const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** Parses + shape-checks a stored JSON string. Throws StorageError if unusable. */
 export function parseDatabase(raw: string): Database {
@@ -37,10 +39,12 @@ export function parseDatabase(raw: string): Database {
   const db = parsed as Partial<Database> | null;
   const valid =
     !!db &&
-    db.version === 1 &&
+    db.version === 2 &&
     Array.isArray(db.users) &&
+    Array.isArray(db.courses) &&
     Array.isArray(db.assignments) &&
-    Array.isArray(db.submissions);
+    Array.isArray(db.groups) &&
+    Array.isArray(db.acknowledgements);
   if (!valid) throw new StorageError('The saved data has an unexpected format.');
   return db as Database;
 }
@@ -61,7 +65,7 @@ export function resetDatabase(): Database {
 }
 
 export async function loadDatabase(): Promise<Database> {
-  await delay(LATENCY_MS);
+  await delay(450);
   let raw: string | null;
   try {
     raw = localStorage.getItem(STORAGE_KEYS.db);
@@ -72,27 +76,27 @@ export async function loadDatabase(): Promise<Database> {
   return parseDatabase(raw);
 }
 
-// ---- session (which user is "logged in") --------------------------------------------------
+// ---- session token ---------------------------------------------------------------------------
 
-export function readSession(): string | null {
+export function readToken(): string | null {
   try {
-    return localStorage.getItem(STORAGE_KEYS.session);
+    return localStorage.getItem(STORAGE_KEYS.token);
   } catch {
     return null;
   }
 }
 
-export function writeSession(userId: string): void {
+export function writeToken(token: string): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.session, userId);
+    localStorage.setItem(STORAGE_KEYS.token, token);
   } catch {
-    /* session just won't survive a refresh */
+    /* the session just won't survive a refresh */
   }
 }
 
-export function clearSession(): void {
+export function clearToken(): void {
   try {
-    localStorage.removeItem(STORAGE_KEYS.session);
+    localStorage.removeItem(STORAGE_KEYS.token);
   } catch {
     /* ignore */
   }
