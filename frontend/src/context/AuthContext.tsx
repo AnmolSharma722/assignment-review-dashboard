@@ -20,6 +20,12 @@ interface AuthContextValue {
   user: User | null;
   /** Why the last session ended ("expired", "signed out"); shown once on the login page. */
   sessionNotice: string | null;
+  /**
+   * True after the user pressed "Sign out" (as opposed to a session expiring). After an
+   * expiry the same person can be returned to the page they were on; after a deliberate
+   * sign-out the next person to sign in should start at their own dashboard.
+   */
+  signedOutByUser: boolean;
   clearSessionNotice: () => void;
   login: (email: string, password: string) => Promise<AuthOutcome>;
   register: (input: RegisterInput) => Promise<AuthOutcome>;
@@ -42,16 +48,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { db, registerUser } = useData();
   const [token, setToken] = useState<string | null>(() => readToken());
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+  const [signedOutByUser, setSignedOutByUser] = useState(false);
 
   const payload = useMemo(() => {
     const check = checkToken(token);
     return check.valid ? check.payload : null;
   }, [token]);
 
-  const endSession = useCallback((notice: string | null) => {
+  const endSession = useCallback((notice: string | null, byUser = false) => {
     clearToken();
     setToken(null);
     setSessionNotice(notice);
+    setSignedOutByUser(byUser);
   }, []);
 
   // Discard a tampered / malformed / expired token found on load.
@@ -95,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     writeToken(next);
     setToken(next);
     setSessionNotice(null);
+    setSignedOutByUser(false);
   }, []);
 
   const login = useCallback(
@@ -120,12 +129,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [registerUser, startSession],
   );
 
-  const logout = useCallback(() => endSession('You have been signed out.'), [endSession]);
+  const logout = useCallback(() => endSession('You have been signed out.', true), [endSession]);
   const clearSessionNotice = useCallback(() => setSessionNotice(null), []);
 
   const value = useMemo(
-    () => ({ user, sessionNotice, clearSessionNotice, login, register, logout }),
-    [user, sessionNotice, clearSessionNotice, login, register, logout],
+    () => ({ user, sessionNotice, signedOutByUser, clearSessionNotice, login, register, logout }),
+    [user, sessionNotice, signedOutByUser, clearSessionNotice, login, register, logout],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

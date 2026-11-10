@@ -11,10 +11,15 @@ import type { Role } from '../../types';
  *  - otherwise      -> the page, inside the app chrome
  */
 export function RequireAuth({ role }: { role: Role }) {
-  const { user } = useAuth();
+  const { user, signedOutByUser } = useAuth();
   const location = useLocation();
 
-  if (!user) return <Navigate to={paths.login} replace state={{ from: location.pathname }} />;
+  if (!user) {
+    // Remember where they were headed (e.g. after a session expiry), but not after a deliberate
+    // sign-out: the next person to sign in should start at their own dashboard.
+    const from = signedOutByUser ? undefined : location.pathname;
+    return <Navigate to={paths.login} replace state={{ from }} />;
+  }
   if (user.role !== role) return <Navigate to={paths.home(user.role)} replace />;
 
   return (
